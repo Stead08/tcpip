@@ -1,5 +1,5 @@
 use crate::domain::value_objects::{ipv4_address::Ipv4Addr, mac_address::MacAddr};
-use crate::infrastructure::serialization::packet_serializer::add_to_buffer;
+use crate::infrastructure::serialization::packet_serializer::{add_to_buffer, Deserialize, Serialize};
 use nom::number::complete::{le_u16, le_u32, le_u8};
 use nom::IResult;
 use std::fmt::Display;
@@ -30,19 +30,6 @@ impl Arp {
             target_mac: MacAddr::broadcast(),
             target_ip,
         }
-    }
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        add_to_buffer(&mut buf, self.hardware_type.to_be_bytes());
-        add_to_buffer(&mut buf, self.protocol_type.to_be_bytes());
-        buf.push(self.hardware_size);
-        buf.push(self.protocol_size);
-        add_to_buffer(&mut buf, self.opcode.to_be_bytes());
-        add_to_buffer(&mut buf, self.sender_mac);
-        add_to_buffer(&mut buf, self.sender_ip);
-        add_to_buffer(&mut buf, self.target_mac);
-        add_to_buffer(&mut buf, self.target_ip);
-        buf
     }
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], Arp> {
         let (input, hardware_type) = le_u16(bytes)?;
@@ -105,3 +92,25 @@ impl Arp {
     }
 }
 
+impl Serialize for Arp {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        add_to_buffer(&mut buf, self.hardware_type.to_be_bytes());
+        add_to_buffer(&mut buf, self.protocol_type.to_be_bytes());
+        buf.push(self.hardware_size);
+        buf.push(self.protocol_size);
+        add_to_buffer(&mut buf, self.opcode.to_be_bytes());
+        add_to_buffer(&mut buf, self.sender_mac);
+        add_to_buffer(&mut buf, self.sender_ip);
+        add_to_buffer(&mut buf, self.target_mac);
+        add_to_buffer(&mut buf, self.target_ip);
+        buf
+    }
+}
+
+impl Deserialize for Arp {
+    fn from_bytes(bytes: &[u8]) -> Arp {
+        let (_, arp) = Arp::from_bytes(bytes).expect("Failed to parse ARP packet");
+        arp
+    }
+}
