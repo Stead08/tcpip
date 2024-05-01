@@ -1,3 +1,4 @@
 pub mod arp;
 pub mod ethernet_frame;
-mod ip;
+pub mod ip;
+pub mod icmp;

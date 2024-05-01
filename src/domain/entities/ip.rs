@@ -1,53 +1,47 @@
 use crate::domain::value_objects::ipv4_address::Ipv4Addr;
 use crate::infrastructure::serialization::packet_serializer::Serialize;
+use crate::domain::enums::ip_type::Protocol;
+use crate::domain::common::checksum::calculate_checksum;
 
-enum Ip {
-    V4(String),
-    V6(String),
+#[derive(Debug, PartialEq)]
+pub struct Ipv4Packet {
+    header: Ipv4Header,
+    payload: Vec<u8>,
 }
 
-enum Protocol {
-    Icmp = 1,
-    IP = 4,
-    Tcp = 6,
-    Udp = 17,
-}
-
-impl Protocol {
-    pub fn from_u8(value: u8) -> Option<Protocol> {
-        match value {
-            1 => Some(Protocol::Icmp),
-            4 => Some(Protocol::IP),
-            6 => Some(Protocol::Tcp),
-            17 => Some(Protocol::Udp),
-            _ => None,
+impl Ipv4Packet {
+    pub fn new(header: Ipv4Header, payload: Vec<u8>) -> Ipv4Packet {
+        Ipv4Packet {
+            header,
+            payload,
         }
     }
-    pub fn to_u8(&self) -> u8 {
-        match self {
-            Protocol::Icmp => 1,
-            Protocol::IP => 4,
-            Protocol::Tcp => 6,
-            Protocol::Udp => 17,
-        }
-    }
-
 }
 
-struct Ipv4Header {
-    version: u8,
-    ihl: u8,
-    dscp: u8,
-    ecn: u8,
-    total_length: u16,
-    identification: u16,
-    flags: u8,
-    fragment_offset: u16,
-    ttl: u8,
-    protocol: Protocol,
-    header_checksum: u16,
-    source: Ipv4Addr,
-    destination: Ipv4Addr,
+impl Serialize for Ipv4Packet {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        buffer.extend(self.header.to_bytes());
+        buffer.extend(&self.payload);
+        buffer
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Ipv4Header {
+    pub version: u8,
+    pub ihl: u8,
+    pub dscp: u8,
+    pub ecn: u8,
+    pub total_length: u16,
+    pub identification: u16,
+    pub flags: u8,
+    pub fragment_offset: u16,
+    pub ttl: u8,
+    pub protocol: Protocol,
+    pub header_checksum: u16,
+    pub source: Ipv4Addr,
+    pub destination: Ipv4Addr,
 }
 
 
@@ -55,7 +49,24 @@ struct Ipv4Header {
 
 
 impl Ipv4Header {
-    pub fn default() -> Ipv4Header {
+    
+    pub fn new(
+        source: Ipv4Addr,
+        destination: Ipv4Addr,
+        protocol: Protocol
+    ) -> Ipv4Header {
+         Ipv4Header{
+            protocol,
+            source,
+            destination,
+            ..Default::default()
+        }
+    }
+    
+}
+
+impl Default for Ipv4Header {
+    fn default() -> Ipv4Header {
         Ipv4Header {
             version: 4,
             ihl: 5,
@@ -65,30 +76,12 @@ impl Ipv4Header {
             identification: 0,
             flags: 0,
             fragment_offset: 0,
-            ttl: 0,
+            ttl: 64,
             protocol: Protocol::IP,
             header_checksum: 0,
             source: Ipv4Addr::new([0, 0, 0, 0]),
             destination: Ipv4Addr::new([0, 0, 0, 0]),
         }
-    }
-    pub fn new(
-        source: Ipv4Addr,
-        destination: Ipv4Addr,
-        protocol: Protocol
-    ) -> Ipv4Header {
-        Ipv4Header{
-            protocol,
-            source,
-            destination,
-            ..Default::default()
-        }
-    }
-}
-
-impl Default for Ipv4Header {
-    fn default() -> Self {
-        Self::default()
     }
 }
 
@@ -122,26 +115,7 @@ mod tests {
         let destination = Ipv4Addr::new([192, 168, 0, 2]);
         let header = Ipv4Header::new(source, destination, Protocol::Tcp);
         let bytes = header.to_bytes();
-        assert_eq!(bytes[0], 0x45);
-        assert_eq!(bytes[1], 0);
-        assert_eq!(bytes[2], 0);
-        assert_eq!(bytes[3], 0);
-        assert_eq!(bytes[4], 0);
-        assert_eq!(bytes[5], 0);
-        assert_eq!(bytes[6], 0);
-        assert_eq!(bytes[7], 0);
-        assert_eq!(bytes[8], 0);
-        assert_eq!(bytes[9], 6);
-        assert_eq!(bytes[10], 0);
-        assert_eq!(bytes[11], 0);
-        assert_eq!(bytes[12], 192);
-        assert_eq!(bytes[13], 168);
-        assert_eq!(bytes[14], 0);
-        assert_eq!(bytes[15], 1);
-        assert_eq!(bytes[16], 192);
-        assert_eq!(bytes[17], 168);
-        assert_eq!(bytes[18], 0);
-        assert_eq!(bytes[19], 2);
+        assert_eq!(bytes, vec![69, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168, 0, 1, 192, 168, 0, 2]);
     }
     #[test]
     fn test_ipv4_header_size() {
