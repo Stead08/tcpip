@@ -39,7 +39,7 @@ pub fn run() -> anyhow::Result<()> {
     // MacAddrに変換
     let mac = MacAddr::new(mac.as_bytes());
     
-    let target_ip = Ipv4Addr::new([192, 168, 101, 1]);
+    let target_ip = Ipv4Addr::new([8, 8, 8, 8]);
     // ARPパケットを作成
     let arp = create_arp_packet(mac, ip,target_ip)?;
     // ethernetフレームを作成
@@ -53,18 +53,7 @@ pub fn run() -> anyhow::Result<()> {
     let icmp = create_icmp_packet()?;
     let bytes = icmp.to_bytes();
     // ipv4パケットを作成
-    let ipv4_header  = Ipv4Header::new(ip, Ipv4Addr::new([192, 168, 101, 1]), domain::enums::ip_type::Protocol::Icmp);
-    // total_lengthを計算
-    let total_length = ipv4_header.to_bytes().len() + bytes.len();
-    let ipv4_header = Ipv4Header {
-        total_length: total_length as u16,
-        ..ipv4_header
-    };
-    let checksum = domain::common::checksum::calculate_checksum(&ipv4_header.to_bytes());
-    let ipv4_header = Ipv4Header {
-        header_checksum: checksum,
-        ..ipv4_header
-    };
+    let ipv4_header  = Ipv4Header::new(ip, Ipv4Addr::new([8, 8, 8, 8]), domain::enums::ip_type::Protocol::Icmp);
     let ipv4_packet = Ipv4Packet::new(ipv4_header, bytes);
     let bytes = ipv4_packet.to_bytes();
     // ethernetフレームを作成

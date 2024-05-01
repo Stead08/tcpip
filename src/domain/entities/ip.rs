@@ -11,6 +11,16 @@ pub struct Ipv4Packet {
 
 impl Ipv4Packet {
     pub fn new(header: Ipv4Header, payload: Vec<u8>) -> Ipv4Packet {
+        let total_length = header.to_bytes().len() + payload.len();
+        let header = Ipv4Header {
+            total_length: total_length as u16,
+            ..header
+        };
+        let checksum = calculate_checksum(&header.to_bytes());
+        let header = Ipv4Header {
+            header_checksum: checksum,
+            ..header
+        };
         Ipv4Packet {
             header,
             payload,
@@ -49,7 +59,6 @@ pub struct Ipv4Header {
 
 
 impl Ipv4Header {
-    
     pub fn new(
         source: Ipv4Addr,
         destination: Ipv4Addr,
