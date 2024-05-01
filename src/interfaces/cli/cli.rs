@@ -47,8 +47,8 @@ pub fn run() -> anyhow::Result<()> {
     let bytes = eth.to_bytes();
     send(interface_name, bytes.as_slice())?;
     let arp_packet = receive_specific_packet(interface_name, EthType::ARP, ip)?; // ARPパケットを受信する
-    
     let target_mac = arp_packet.sender_mac;
+    
     // ICMPパケットを作成
     let icmp = create_icmp_packet()?;
     let bytes = icmp.to_bytes();
