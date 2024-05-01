@@ -1,13 +1,11 @@
-use std::cmp::PartialEq;
 use crate::domain::entities::arp::Arp;
 use pnet::datalink;
 use pnet::datalink::Channel::Ethernet;
 use pnet::packet::ethernet::EtherType;
 use pnet::packet::Packet;
-use std::io::Read;
-use nom::AsBytes;
 use crate::domain::entities::ethernet_frame::EthernetFrame;
 use crate::domain::enums::eth_type::EthType;
+use crate::infrastructure::serialization::packet_serializer::Deserialize;
 
 pub fn get_interface(interface_name: &str) -> anyhow::Result<datalink::NetworkInterface> {
     let Some(interface) = datalink::interfaces()

@@ -4,6 +4,7 @@ use crate::domain::enums::eth_type::EthType;
 use crate::domain::value_objects::ipv4_address::Ipv4Addr;
 use crate::domain::value_objects::mac_address::MacAddr;
 use crate::infrastructure::network::datalink_operations::{receive_specific_packet, send};
+use crate::infrastructure::serialization::packet_serializer::Serialize;
 use crate::interfaces::cli::util::get_ip;
 
 pub fn run() -> anyhow::Result<()> {

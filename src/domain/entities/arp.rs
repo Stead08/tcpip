@@ -33,15 +33,15 @@ impl Arp {
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        add_to_buffer(&mut buf, &self.hardware_type.to_be_bytes());
-        add_to_buffer(&mut buf, &self.protocol_type.to_be_bytes());
+        add_to_buffer(&mut buf, self.hardware_type.to_be_bytes());
+        add_to_buffer(&mut buf, self.protocol_type.to_be_bytes());
         buf.push(self.hardware_size);
         buf.push(self.protocol_size);
-        add_to_buffer(&mut buf, &self.opcode.to_be_bytes());
-        add_to_buffer(&mut buf, &self.sender_mac);
-        add_to_buffer(&mut buf, &self.sender_ip);
-        add_to_buffer(&mut buf, &self.target_mac);
-        add_to_buffer(&mut buf, &self.target_ip);
+        add_to_buffer(&mut buf, self.opcode.to_be_bytes());
+        add_to_buffer(&mut buf, self.sender_mac);
+        add_to_buffer(&mut buf, self.sender_ip);
+        add_to_buffer(&mut buf, self.target_mac);
+        add_to_buffer(&mut buf, self.target_ip);
         buf
     }
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], Arp> {
@@ -80,12 +80,14 @@ impl Arp {
             (sender_ip >> 16) as u8,
             (sender_ip >> 24) as u8,
         ];
+        let sender_ip = Ipv4Addr::new(sender_ip);
         let target_ip = [
             target_ip as u8,
             (target_ip >> 8) as u8,
             (target_ip >> 16) as u8,
             (target_ip >> 24) as u8,
         ];
+        let target_ip = Ipv4Addr::new(target_ip);
         Ok((
             input,
             Arp {
