@@ -60,7 +60,7 @@ pub fn run() -> anyhow::Result<()> {
     send(interface_name, bytes.as_slice())?;
     let arp_packet = receive_specific_packet(interface_name, EthType::ARP, ip)?; // ARPパケットを受信する
     let target_mac = arp_packet.sender_mac;
-    
+
     tcp_three_way_handshake(ip, target_ip, mac, target_mac, interface_name)?;
 
     Ok(())
@@ -102,7 +102,7 @@ fn tcp_three_way_handshake(
     // 3-way handshake
     let sequence_number = random::<u32>();
     let src_port = Port::new(22334);
-    let dest_port = Port::new(80);
+    let dest_port = Port::new(8000);
     // Synパケットを作成
     let syn_packet = domain::entities::tcp::TcpPacket::new(
         src_ip,
@@ -122,19 +122,27 @@ fn tcp_three_way_handshake(
     // パケットを送信
     send(interface_name, eth_frame.to_bytes().as_slice())?;
     // SYN+ACKパケットを受信
-    receive_tcp_handshake(interface_name, src_mac, dest_mac, src_ip, dest_ip, src_port, dest_port)?;
-    
+    receive_tcp_handshake(
+        interface_name,
+        src_mac,
+        dest_mac,
+        src_ip,
+        dest_ip,
+        src_port,
+        dest_port,
+    )?;
+
     Ok(())
 }
 
 pub fn receive_tcp_handshake(
     interface_name: &str,
-    local_mac: MacAddr, // 自身のMACアドレス
+    local_mac: MacAddr,  // 自身のMACアドレス
     remote_mac: MacAddr, // 対象のMACアドレス
-    local_ip: Ipv4Addr, // 自身のIPアドレス
+    local_ip: Ipv4Addr,  // 自身のIPアドレス
     remote_ip: Ipv4Addr, // 対象のIPアドレス
-    local_port: Port, // 自身のポート番号
-    remote_port: Port, // 対象のポート番号
+    local_port: Port,    // 自身のポート番号
+    remote_port: Port,   // 対象のポート番号
 ) -> anyhow::Result<()> {
     let interface = get_interface(interface_name)?;
 
@@ -153,9 +161,12 @@ pub fn receive_tcp_handshake(
                     let tcp_packet = TcpPacket::from_bytes(&ip_packet.payload);
 
                     // SYN+ACKの確認と送信元/送信先ポートの検証
-                    if tcp_packet.header.flags.syn && tcp_packet.header.flags.ack
-                        && tcp_packet.header.source_port.to_port_number() == remote_port.to_port_number()
-                        && tcp_packet.header.destination_port.to_port_number() == local_port.to_port_number()
+                    if tcp_packet.header.flags.syn
+                        && tcp_packet.header.flags.ack
+                        && tcp_packet.header.source_port.to_port_number()
+                            == remote_port.to_port_number()
+                        && tcp_packet.header.destination_port.to_port_number()
+                            == local_port.to_port_number()
                     {
                         println!("{:?}", tcp_packet);
                         let syn_ack_packet = tcp_packet;
@@ -173,11 +184,51 @@ pub fn receive_tcp_handshake(
                             None,
                         );
                         // ACKパケットを送信
-                        let ip_header = Ipv4Header::new(local_ip, remote_ip, domain::enums::ip_type::Protocol::Tcp);
+                        let ip_header = Ipv4Header::new(
+                            local_ip,
+                            remote_ip,
+                            domain::enums::ip_type::Protocol::Tcp,
+                        );
                         let ip_packet = Ipv4Packet::new(ip_header, ack_packet.to_bytes());
-                        let eth_frame = EthernetFrame::new(local_mac, remote_mac, EthType::IPv4, ip_packet.to_bytes());
+                        let eth_frame = EthernetFrame::new(
+                            local_mac,
+                            remote_mac,
+                            EthType::IPv4,
+                            ip_packet.to_bytes(),
+                        );
                         tx.send_to(eth_frame.to_bytes().as_slice(), None);
                         println!("TCP handshake completed");
+                        // FINACKパケットを作成
+                        let fin_ack_packet = domain::entities::tcp::TcpPacket::new(
+                            local_ip,
+                            remote_ip,
+                            local_port,
+                            remote_port,
+                            ack_number,
+                            sequence_number + 1,
+                            vec![
+                                domain::enums::tcp_type::ControlFlag::FIN,
+                                domain::enums::tcp_type::ControlFlag::ACK,
+                            ],
+                            None,
+                        );
+                        // FINACKパケットを送信
+                        let ip_header = Ipv4Header::new(
+                            local_ip,
+                            remote_ip,
+                            domain::enums::ip_type::Protocol::Tcp,
+                        );
+                        let ip_packet = Ipv4Packet::new(ip_header, fin_ack_packet.to_bytes());
+                        let eth_frame = EthernetFrame::new(
+                            local_mac,
+                            remote_mac,
+                            EthType::IPv4,
+                            ip_packet.to_bytes(),
+                        );
+                        tx.send_to(eth_frame.to_bytes().as_slice(), None);
+                        println!("TCP connection closed");
+                        // 3秒待つ
+                        std::thread::sleep(std::time::Duration::from_secs(3));
                         return Ok(());
                     }
                 }
@@ -193,5 +244,3 @@ pub fn receive_tcp_handshake(
         "Failed to complete TCP handshake",
     )))
 }
-
-

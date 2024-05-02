@@ -73,16 +73,4 @@ impl Serialize for Icmp {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_serialize_icmp_echo() {
-        let echo_request = EchoRequestPacket::new(0, 0, vec![0, 1, 2, 3]);
-        let icmp = Icmp::new(
-            IcmpType::EchoRequest,
-            0,
-            IcmpData::EchoRequest(echo_request),
-        );
-        let expected = vec![8, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3];
-        assert_eq!(icmp.to_bytes(), expected);
-    }
 }

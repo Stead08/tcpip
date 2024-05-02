@@ -173,15 +173,15 @@ impl Default for TcpHeader {
 
 #[derive(Debug, Default)]
 pub struct ControlFlags {
-    ns: bool,
-    cwr: bool,
-    ece: bool,
-    urg: bool,
-    pub(crate) ack: bool,
-    psh: bool,
-    rst: bool,
-    pub(crate) syn: bool,
-    fin: bool,
+    pub ns: bool,
+    pub cwr: bool,
+    pub ece: bool,
+    pub urg: bool,
+    pub ack: bool,
+    pub psh: bool,
+    pub rst: bool,
+    pub syn: bool,
+    pub fin: bool,
 }
 
 impl ControlFlags {
@@ -259,6 +259,7 @@ mod tests {
             source_port,
             dest_port,
             sequence_number,
+            0,
             flags,
             None,
         );
