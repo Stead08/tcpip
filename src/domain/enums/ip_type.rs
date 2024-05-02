@@ -29,5 +29,4 @@ impl Protocol {
             Protocol::Udp => 17,
         }
     }
-
 }

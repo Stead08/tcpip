@@ -50,7 +50,7 @@ impl IcmpType {
             IcmpType::AddressMaskReply => 18,
         }
     }
-    
+
     pub fn to_u16(&self) -> u16 {
         self.to_u8() as u16
     }

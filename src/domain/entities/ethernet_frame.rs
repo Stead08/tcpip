@@ -1,7 +1,9 @@
-use nom::AsBytes;
 use crate::domain::enums::eth_type::EthType;
 use crate::domain::value_objects::mac_address::MacAddr;
-use crate::infrastructure::serialization::packet_serializer::{add_to_buffer, Deserialize, Serialize};
+use crate::infrastructure::serialization::packet_serializer::{
+    add_to_buffer, Deserialize, Serialize,
+};
+use nom::AsBytes;
 
 #[derive(Clone)]
 pub struct EthernetFrame {
@@ -19,23 +21,20 @@ impl EthernetFrame {
             payload,
         }
     }
-    
+
     pub fn get_ethertype(&self) -> EthType {
         self.eth_type
     }
 }
 
 impl Serialize for EthernetFrame {
-
     fn to_bytes(&self) -> Vec<u8> {
-            let mut buf = Vec::new();
-            add_to_buffer(&mut buf, &self.dst);
-            add_to_buffer(&mut buf, &self.src);
-            add_to_buffer(&mut buf, (self.eth_type as u16).to_be_bytes());
-            add_to_buffer(&mut buf, &self.payload);
-            buf
-
-        
+        let mut buf = Vec::new();
+        add_to_buffer(&mut buf, &self.dst);
+        add_to_buffer(&mut buf, &self.src);
+        add_to_buffer(&mut buf, (self.eth_type as u16).to_be_bytes());
+        add_to_buffer(&mut buf, &self.payload);
+        buf
     }
 }
 

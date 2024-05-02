@@ -11,25 +11,25 @@ impl MacAddr {
         mac_addr.copy_from_slice(addr);
         MacAddr(mac_addr)
     }
-    
+
     pub fn broadcast() -> MacAddr {
         MacAddr([0xFF; MAC_ADDR_SIZE])
     }
-    
+
     // 00:00:00:00:00:00のMACアドレスを生成
     pub fn zero() -> MacAddr {
         MacAddr([0; MAC_ADDR_SIZE])
     }
-    
 }
-
 
 impl std::fmt::Debug for MacAddr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-               self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5])
+        write!(
+            f,
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+        )
     }
-
 }
 
 impl std::convert::AsRef<[u8]> for MacAddr {

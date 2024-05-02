@@ -1,12 +1,50 @@
+use crate::domain::common::checksum::calculate_checksum;
+use crate::domain::enums::ip_type::Protocol;
 use crate::domain::value_objects::ipv4_address::Ipv4Addr;
 use crate::infrastructure::serialization::packet_serializer::Serialize;
-use crate::domain::enums::ip_type::Protocol;
-use crate::domain::common::checksum::calculate_checksum;
+use anyhow::anyhow;
 
 #[derive(Debug, PartialEq)]
 pub struct Ipv4Packet {
     header: Ipv4Header,
-    payload: Vec<u8>,
+    pub(crate) payload: Vec<u8>,
+}
+
+impl Ipv4Packet {
+    pub fn from_bytes(bytes: &[u8]) -> anyhow::Result<Ipv4Packet> {
+        // protocolが不正な場合はエラーを返す
+        if Protocol::from_u8(bytes[9]).is_none() {
+            return Err(anyhow!("Invalid protocol : {}", bytes[9]));
+        }
+        let header = Ipv4Header {
+            version: bytes[0] >> 4,
+            ihl: bytes[0] & 0x0F,
+            dscp: bytes[1] >> 2,
+            ecn: bytes[1] & 0x03,
+            total_length: u16::from_be_bytes([bytes[2], bytes[3]]),
+            identification: u16::from_be_bytes([bytes[4], bytes[5]]),
+            flags: bytes[6] >> 5,
+            fragment_offset: u16::from_be_bytes([bytes[6] & 0x1F, bytes[7]]),
+            ttl: bytes[8],
+            protocol: Protocol::from_u8(bytes[9]).ok_or(anyhow!("Invalid protocol"))?,
+            header_checksum: u16::from_be_bytes([bytes[10], bytes[11]]),
+            source: Ipv4Addr::new([bytes[12], bytes[13], bytes[14], bytes[15]]),
+            destination: Ipv4Addr::new([bytes[16], bytes[17], bytes[18], bytes[19]]),
+        };
+        let payload = bytes[header.ihl as usize * 4..].to_vec();
+        Ok(Ipv4Packet { header, payload })
+    }
+    pub fn get_protocol(&self) -> Protocol {
+        self.header.protocol
+    }
+
+    pub fn get_source_ip(&self) -> Ipv4Addr {
+        self.header.source
+    }
+
+    pub fn get_destination_ip(&self) -> Ipv4Addr {
+        self.header.destination
+    }
 }
 
 impl Ipv4Packet {
@@ -21,10 +59,7 @@ impl Ipv4Packet {
             header_checksum: checksum,
             ..header
         };
-        Ipv4Packet {
-            header,
-            payload,
-        }
+        Ipv4Packet { header, payload }
     }
 }
 
@@ -54,24 +89,15 @@ pub struct Ipv4Header {
     pub destination: Ipv4Addr,
 }
 
-
-
-
-
 impl Ipv4Header {
-    pub fn new(
-        source: Ipv4Addr,
-        destination: Ipv4Addr,
-        protocol: Protocol
-    ) -> Ipv4Header {
-         Ipv4Header{
+    pub fn new(source: Ipv4Addr, destination: Ipv4Addr, protocol: Protocol) -> Ipv4Header {
+        Ipv4Header {
             protocol,
             source,
             destination,
             ..Default::default()
         }
     }
-    
 }
 
 impl Default for Ipv4Header {
@@ -124,7 +150,10 @@ mod tests {
         let destination = Ipv4Addr::new([192, 168, 0, 2]);
         let header = Ipv4Header::new(source, destination, Protocol::Tcp);
         let bytes = header.to_bytes();
-        assert_eq!(bytes, vec![69, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168, 0, 1, 192, 168, 0, 2]);
+        assert_eq!(
+            bytes,
+            vec![69, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168, 0, 1, 192, 168, 0, 2]
+        );
     }
     #[test]
     fn test_ipv4_header_size() {

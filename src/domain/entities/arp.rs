@@ -1,5 +1,7 @@
 use crate::domain::value_objects::{ipv4_address::Ipv4Addr, mac_address::MacAddr};
-use crate::infrastructure::serialization::packet_serializer::{add_to_buffer, Deserialize, Serialize};
+use crate::infrastructure::serialization::packet_serializer::{
+    add_to_buffer, Deserialize, Serialize,
+};
 use nom::number::complete::{le_u16, le_u32, le_u8};
 use nom::IResult;
 use std::fmt::Display;

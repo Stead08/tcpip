@@ -14,7 +14,4 @@ impl EthType {
             _ => None,
         }
     }
-    
 }
-
-

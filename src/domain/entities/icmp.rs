@@ -1,6 +1,6 @@
 use crate::domain::common::checksum::calculate_checksum;
-use crate::infrastructure::serialization::packet_serializer::Serialize;
 use crate::domain::enums::icmp_type::IcmpType;
+use crate::infrastructure::serialization::packet_serializer::Serialize;
 
 pub struct Icmp {
     icmp_type: IcmpType,
@@ -8,7 +8,6 @@ pub struct Icmp {
     checksum: u16,
     data: IcmpData,
 }
-
 
 pub enum IcmpData {
     EchoRequest(EchoRequestPacket),
@@ -30,10 +29,7 @@ impl EchoRequestPacket {
             data,
         }
     }
-    
 }
-
-
 
 impl Serialize for EchoRequestPacket {
     fn to_bytes(&self) -> Vec<u8> {
@@ -81,9 +77,12 @@ mod tests {
     #[test]
     fn test_serialize_icmp_echo() {
         let echo_request = EchoRequestPacket::new(0, 0, vec![0, 1, 2, 3]);
-        let icmp = Icmp::new(IcmpType::EchoRequest, 0, IcmpData::EchoRequest(echo_request));
+        let icmp = Icmp::new(
+            IcmpType::EchoRequest,
+            0,
+            IcmpData::EchoRequest(echo_request),
+        );
         let expected = vec![8, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3];
         assert_eq!(icmp.to_bytes(), expected);
     }
 }
-

@@ -1,5 +1,6 @@
 pub mod arp;
 pub mod ethernet_frame;
-pub mod ip;
 pub mod icmp;
-pub(crate) mod udp;
+pub mod ip;
+pub mod tcp;
+pub mod udp;

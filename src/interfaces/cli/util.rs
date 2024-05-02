@@ -1,5 +1,5 @@
-use std::net::IpAddr;
 use pnet::datalink;
+use std::net::IpAddr;
 
 pub fn get_ip(interface_name: &str) -> anyhow::Result<IpAddr> {
     let interfaces = datalink::interfaces();
@@ -21,6 +21,8 @@ pub fn get_mac(interface_name: &str) -> anyhow::Result<[u8; 6]> {
         .into_iter()
         .find(|iface| iface.name == interface_name)
         .ok_or_else(|| anyhow::anyhow!("Interface {} not found", interface_name))?;
-    let mac = interface.mac.ok_or_else(|| anyhow::anyhow!("MAC address not found"))?;
+    let mac = interface
+        .mac
+        .ok_or_else(|| anyhow::anyhow!("MAC address not found"))?;
     Ok(mac.octets())
 }
