@@ -18,7 +18,10 @@ use crate::interfaces::cli::util::{get_ip, get_mac};
 use nom::AsBytes;
 use pnet::datalink;
 use pnet::datalink::Channel::Ethernet;
+use pnet::datalink::{DataLinkReceiver, DataLinkSender};
 use rand::random;
+use crate::domain::enums::tcp_type::ControlFlag;
+use crate::domain::enums::tcp_type::ControlFlag::{ACK, FIN, SYN};
 
 pub fn run() -> anyhow::Result<()> {
     // 使用するデバイスのインターフェース名
@@ -61,7 +64,7 @@ pub fn run() -> anyhow::Result<()> {
     let arp_packet = receive_specific_packet(interface_name, EthType::ARP, ip)?; // ARPパケットを受信する
     let target_mac = arp_packet.sender_mac;
 
-    tcp_three_way_handshake(ip, target_ip, mac, target_mac, interface_name)?;
+    tcp_three_way_handshake_and_fin(ip, target_ip, mac, target_mac, interface_name)?;
 
     Ok(())
 }
@@ -92,155 +95,224 @@ fn create_icmp_packet() -> anyhow::Result<Icmp> {
     Ok(icmp)
 }
 
-fn tcp_three_way_handshake(
+pub fn tcp_three_way_handshake_and_fin(
     src_ip: Ipv4Addr,
     dest_ip: Ipv4Addr,
     src_mac: MacAddr,
     dest_mac: MacAddr,
     interface_name: &str,
 ) -> anyhow::Result<()> {
-    // 3-way handshake
+    let interface = get_interface(interface_name)?;
+    let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+        Ok(Ethernet(tx, rx)) => (tx, rx),
+        Ok(_) => panic!("Unhandled channel type"),
+        Err(e) => panic!("Failed to create datalink channel: {}", e),
+    };
+
     let sequence_number = random::<u32>();
-    let src_port = Port::new(22334);
+    // 使えるポート番号を適当に選ぶ
+    let port_number = random::<u16>();
+    // well-knownや範囲外のポート番号を避ける
+    let src_port = Port::new(port_number + 1024);
     let dest_port = Port::new(8000);
-    // Synパケットを作成
-    let syn_packet = domain::entities::tcp::TcpPacket::new(
+
+    // Send SYN
+    send_syn_packet(
+        &mut tx,
+        src_ip,
+        dest_ip,
+        src_mac,
+        dest_mac,
+        src_port,
+        dest_port,
+        sequence_number,
+    )?;
+
+    // Receive SYN-ACK
+    let syn_ack = receive_specific_flag_packet(&mut rx, src_ip, dest_ip, src_port, dest_port, vec![SYN, ACK])?;
+
+    let acknowledgment_number = syn_ack.header.sequence_number + 1;
+
+    // Send ACK
+    send_ack_packet(
+        &mut tx,
+        src_ip,
+        dest_ip,
+        src_mac,
+        dest_mac,
+        src_port,
+        dest_port,
+        sequence_number + 1,
+        acknowledgment_number,
+    )?;
+
+    // 3秒待つ
+    std::thread::sleep(std::time::Duration::from_secs(3));
+
+    // Send FIN
+    send_fin_packet(
+        &mut tx,
+        src_ip,
+        dest_ip,
+        src_mac,
+        dest_mac,
+        src_port,
+        dest_port,
+        sequence_number + 1,
+        acknowledgment_number,
+    )?;
+
+    // Receive FIN/ACK
+    receive_specific_flag_packet(&mut rx, src_ip, dest_ip, src_port, dest_port, vec![FIN, ACK])?;
+    // Send ACK
+    send_ack_packet(
+        &mut tx,
+        src_ip,
+        dest_ip,
+        src_mac,
+        dest_mac,
+        src_port,
+        dest_port,
+        sequence_number + 2,
+        acknowledgment_number + 1,
+    )?;
+
+    Ok(())
+}
+
+fn send_syn_packet(
+    tx: &mut Box<dyn DataLinkSender>,
+    src_ip: Ipv4Addr,
+    dest_ip: Ipv4Addr,
+    src_mac: MacAddr,
+    dest_mac: MacAddr,
+    src_port: Port,
+    dest_port: Port,
+    sequence_number: u32,
+) -> anyhow::Result<()> {
+    let tcp = TcpPacket::new(
         src_ip,
         dest_ip,
         src_port,
         dest_port,
         sequence_number,
         0,
-        vec![domain::enums::tcp_type::ControlFlag::SYN],
+        vec![SYN],
         None,
     );
-    // Ipパケットを作成
-    let ip_header = Ipv4Header::new(src_ip, dest_ip, domain::enums::ip_type::Protocol::Tcp);
-    let ip_packet = Ipv4Packet::new(ip_header, syn_packet.to_bytes());
-    // Ethernetフレームを作成
+    let ip_header = Ipv4Header::new(src_ip, dest_ip, Protocol::Tcp);
+    let ip_packet = Ipv4Packet::new(ip_header, tcp.to_bytes());
     let eth_frame = EthernetFrame::new(src_mac, dest_mac, EthType::IPv4, ip_packet.to_bytes());
-    // パケットを送信
-    send(interface_name, eth_frame.to_bytes().as_slice())?;
-    // SYN+ACKパケットを受信
-    receive_tcp_handshake(
-        interface_name,
-        src_mac,
-        dest_mac,
+    let bytes = eth_frame.to_bytes();
+    tx.send_to(bytes.as_slice(), None);
+    println!("SYN packet sent.");
+    Ok(())
+}
+
+fn receive_specific_flag_packet(
+    rx: &mut Box<dyn DataLinkReceiver>,
+    src_ip: Ipv4Addr,
+    dest_ip: Ipv4Addr,
+    src_port: Port,
+    dest_port: Port,
+    flags: Vec<ControlFlag>,
+) -> anyhow::Result<TcpPacket> {
+    loop {
+        let packet = rx.next()?;
+        let eth_frame = EthernetFrame::from_bytes(&packet);
+        if eth_frame.get_ethertype() != EthType::IPv4 {
+            continue;
+        }
+        let ip_packet = Ipv4Packet::from_bytes(&eth_frame.payload)?;
+        if ip_packet.get_protocol() != Protocol::Tcp {
+            continue;
+        }
+        if ip_packet.get_source_ip() != dest_ip || ip_packet.get_destination_ip() != src_ip {
+            continue;
+        }
+        let tcp_packet = TcpPacket::from_bytes(&ip_packet.payload);
+        if tcp_packet.header.source_port.to_port_number() != dest_port.to_port_number()
+            || tcp_packet.header.destination_port.to_port_number() != src_port.to_port_number()
+        {
+            continue;
+        }
+        if !flags.is_empty() {
+            let mut found = false;
+            for flag in flags.iter() {
+                if !tcp_packet.header.flags.contains(flag) {
+                    found = false;
+                    break;
+                }
+                found = true;
+            }
+            if !found {
+                continue;
+            }
+        }
+        return Ok(tcp_packet);
+    }
+}
+
+fn send_ack_packet(
+    tx: &mut Box<dyn DataLinkSender>,
+    src_ip: Ipv4Addr,
+    dest_ip: Ipv4Addr,
+    src_mac: MacAddr,
+    dest_mac: MacAddr,
+    src_port: Port,
+    dest_port: Port,
+    sequence_number: u32,
+    acknowledgment_number: u32,
+) -> anyhow::Result<()> {
+    // Build and send an ACK packet
+    let tcp = TcpPacket::new(
         src_ip,
         dest_ip,
         src_port,
         dest_port,
-    )?;
+        sequence_number,
+        acknowledgment_number,
+        vec![ACK],
+        None,
+    );
+    let ip_header = Ipv4Header::new(src_ip, dest_ip, Protocol::Tcp);
+    let ip_packet = Ipv4Packet::new(ip_header, tcp.to_bytes());
+    let eth_frame = EthernetFrame::new(src_mac, dest_mac, EthType::IPv4, ip_packet.to_bytes());
+    let bytes = eth_frame.to_bytes();
+    tx.send_to(bytes.as_slice(), None);
 
+    println!("ACK packet sent.");
     Ok(())
 }
 
-pub fn receive_tcp_handshake(
-    interface_name: &str,
-    local_mac: MacAddr,  // 自身のMACアドレス
-    remote_mac: MacAddr, // 対象のMACアドレス
-    local_ip: Ipv4Addr,  // 自身のIPアドレス
-    remote_ip: Ipv4Addr, // 対象のIPアドレス
-    local_port: Port,    // 自身のポート番号
-    remote_port: Port,   // 対象のポート番号
+fn send_fin_packet(
+    tx: &mut Box<dyn DataLinkSender>,
+    src_ip: Ipv4Addr,
+    dest_ip: Ipv4Addr,
+    src_mac: MacAddr,
+    dest_mac: MacAddr,
+    src_port: Port,
+    dest_port: Port,
+    sequence_number: u32,
+    acknowledgment_number: u32,
 ) -> anyhow::Result<()> {
-    let interface = get_interface(interface_name)?;
+    // Build and send a FIN packet
+    let tcp = TcpPacket::new(
+        src_ip,
+        dest_ip,
+        src_port,
+        dest_port,
+        sequence_number,
+        acknowledgment_number,
+        vec![ACK, FIN],
+        None,
+    );
+    let ip_header = Ipv4Header::new(src_ip, dest_ip, Protocol::Tcp);
+    let ip_packet = Ipv4Packet::new(ip_header, tcp.to_bytes());
+    let eth_frame = EthernetFrame::new(src_mac, dest_mac, EthType::IPv4, ip_packet.to_bytes());
+    let bytes = eth_frame.to_bytes();
+    tx.send_to(bytes.as_slice(), None);
 
-    if let Ethernet(mut tx, mut rx) = datalink::channel(&interface, Default::default())? {
-        while let Ok(packet) = rx.next() {
-            let eth_frame = EthernetFrame::from_bytes(&packet);
-
-            if eth_frame.get_ethertype() == EthType::IPv4 {
-                let ip_packet = Ipv4Packet::from_bytes(&eth_frame.payload)?;
-
-                // 受信パケットの送信元と送信先を検証
-                if ip_packet.get_protocol() == Protocol::Tcp
-                    && ip_packet.get_source_ip() == remote_ip
-                    && ip_packet.get_destination_ip() == local_ip
-                {
-                    let tcp_packet = TcpPacket::from_bytes(&ip_packet.payload);
-
-                    // SYN+ACKの確認と送信元/送信先ポートの検証
-                    if tcp_packet.header.flags.syn
-                        && tcp_packet.header.flags.ack
-                        && tcp_packet.header.source_port.to_port_number()
-                            == remote_port.to_port_number()
-                        && tcp_packet.header.destination_port.to_port_number()
-                            == local_port.to_port_number()
-                    {
-                        println!("{:?}", tcp_packet);
-                        let syn_ack_packet = tcp_packet;
-                        let ack_number = syn_ack_packet.header.acknowledgment_number;
-                        let sequence_number = syn_ack_packet.header.sequence_number;
-                        // ACKパケットを作成
-                        let ack_packet = domain::entities::tcp::TcpPacket::new(
-                            local_ip,
-                            remote_ip,
-                            local_port,
-                            remote_port,
-                            ack_number,
-                            sequence_number + 1,
-                            vec![domain::enums::tcp_type::ControlFlag::ACK],
-                            None,
-                        );
-                        // ACKパケットを送信
-                        let ip_header = Ipv4Header::new(
-                            local_ip,
-                            remote_ip,
-                            domain::enums::ip_type::Protocol::Tcp,
-                        );
-                        let ip_packet = Ipv4Packet::new(ip_header, ack_packet.to_bytes());
-                        let eth_frame = EthernetFrame::new(
-                            local_mac,
-                            remote_mac,
-                            EthType::IPv4,
-                            ip_packet.to_bytes(),
-                        );
-                        tx.send_to(eth_frame.to_bytes().as_slice(), None);
-                        println!("TCP handshake completed");
-                        // FINACKパケットを作成
-                        let fin_ack_packet = domain::entities::tcp::TcpPacket::new(
-                            local_ip,
-                            remote_ip,
-                            local_port,
-                            remote_port,
-                            ack_number,
-                            sequence_number + 1,
-                            vec![
-                                domain::enums::tcp_type::ControlFlag::FIN,
-                                domain::enums::tcp_type::ControlFlag::ACK,
-                            ],
-                            None,
-                        );
-                        // FINACKパケットを送信
-                        let ip_header = Ipv4Header::new(
-                            local_ip,
-                            remote_ip,
-                            domain::enums::ip_type::Protocol::Tcp,
-                        );
-                        let ip_packet = Ipv4Packet::new(ip_header, fin_ack_packet.to_bytes());
-                        let eth_frame = EthernetFrame::new(
-                            local_mac,
-                            remote_mac,
-                            EthType::IPv4,
-                            ip_packet.to_bytes(),
-                        );
-                        tx.send_to(eth_frame.to_bytes().as_slice(), None);
-                        println!("TCP connection closed");
-                        // 3秒待つ
-                        std::thread::sleep(std::time::Duration::from_secs(3));
-                        return Ok(());
-                    }
-                }
-            }
-        }
-    } else {
-        eprintln!("Failed to open channel");
-        std::process::exit(1);
-    }
-
-    Err(anyhow::Error::new(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Failed to complete TCP handshake",
-    )))
+    println!("FIN packet sent.");
+    Ok(())
 }

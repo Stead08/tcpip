@@ -185,6 +185,22 @@ pub struct ControlFlags {
 }
 
 impl ControlFlags {
+    pub fn contains(&self, p0: &ControlFlag) -> bool {
+        match p0 {
+            ControlFlag::NS => self.ns,
+            ControlFlag::CWR => self.cwr,
+            ControlFlag::ECE => self.ece,
+            ControlFlag::URG => self.urg,
+            ControlFlag::ACK => self.ack,
+            ControlFlag::PSH => self.psh,
+            ControlFlag::RST => self.rst,
+            ControlFlag::SYN => self.syn,
+            ControlFlag::FIN => self.fin,
+        }
+    }
+}
+
+impl ControlFlags {
     pub fn new(true_flags: Vec<ControlFlag>) -> Self {
         let mut flags = ControlFlags::default();
         for flag in true_flags {
